@@ -95,9 +95,13 @@ ParsedLine parse_line(const std::string& line) {
 
         if (key.find_first_of('"') != std::string::npos) {
             parsed_line.key = key.substr(key.find_first_of('"') + 1, key.find_last_of('"') - key.find_first_of('"') - 1);
+        } else {
+            parsed_line.key = key;
         }
         if (value.find_first_of('"') != std::string::npos) {
             parsed_line.value = value.substr(value.find_first_of('"') + 1, value.find_last_of('"') - value.find_first_of('"') - 1);
+        } else {
+            parsed_line.value = value;
         }
 
 
@@ -117,14 +121,31 @@ ParsedLine parse_line(const std::string& line) {
 
 
 int main() {
+
+    std::vector<std::string> test_lines = {
+        R"("name": "John")",
+        R"("age": 25)",
+        R"(isAdmin: true)",
+        R"(country: "USA")",
+        R"(empty: "")",
+        R"(  "withSpaces"  :    "  spaced value  "  )"
+    };
+
+    for (const auto& line : test_lines) {
+        ParsedLine parsed = parse_line(line);
+        std::cout << "Line: " << line << "\n";
+        std::cout << "  Type: " << to_string(parsed.type) << "\n";
+        std::cout << "  Key: [" << parsed.key << "]\n";
+        std::cout << "  Value: [" << parsed.value << "]\n\n";
+    }
     // const std::string test_data = "Lol:true";
     //
     // parse_line(test_data);
 
-    std::string filename;
-    std::getline(std::cin, filename);
-    load_file(filename);
-    std::cout << is_json(filename);
+    // std::string filename;
+    // std::getline(std::cin, filename);
+    // load_file(filename);
+    // std::cout << is_json(filename);
 
     return 0;
 }
