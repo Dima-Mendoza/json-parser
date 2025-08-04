@@ -77,45 +77,74 @@ std::string to_string(LineType type) {
     }
 }
 
+auto delete_quotes(const std::string &line) {
+
+    std::pair<std::string, std::string> result;
+
+    std::string trimmed_line = trim(line);
+
+    size_t pos = trimmed_line.find_first_of(':');
+
+    if (pos == std::string::npos) {
+        std::cerr << "Error, pos is npos";
+        return result;
+    }
+
+    std::string key = trimmed_line.substr(0, pos);
+    std::string value = trimmed_line.substr(pos+1);
+
+    key = trim(key);
+    value = trim(value);
+
+    if (key.find_first_of('"') != std::string::npos) {
+        key = key.substr(key.find_first_of('"') + 1, key.find_last_of('"') - key.find_first_of('"') - 1);
+    }
+
+    if (value.find_first_of('"') != std::string::npos) {
+        value = value.substr(value.find_first_of('"') + 1, value.find_last_of('"') - value.find_first_of('"') - 1);
+    }
+
+    result.first = key;
+    result.second = value;
+
+    return result;
+    /*
+    find_first and find_last can return minus statament and it give UB!!!
+    */
+
+}
+
 ParsedLine parse_line(const std::string& line) {
     ParsedLine parsed_line;
     LineType type = classify_line(line);
-    std::string trimmed_line = trim(line);
+    // std::string trimmed_line = trim(line);
 
     parsed_line.type = type;
 
-    //Create function  auto delete_quotes to delete quotes and add else if line haven't quotes
     if (parsed_line.type == LineType::KEY_VALUE) {
-        size_t pos = trimmed_line.find_first_of(':');
 
-        std::string key = trimmed_line.substr(0, pos);
-        std::string value = trimmed_line.substr(pos + 1);
-        key = trim(key);
-        value = trim(value);
+        std::string key = delete_quotes(line).first;
+        std::string value = delete_quotes(line).second;
 
-        if (key.find_first_of('"') != std::string::npos) {
-            parsed_line.key = key.substr(key.find_first_of('"') + 1, key.find_last_of('"') - key.find_first_of('"') - 1);
-        } else {
-            parsed_line.key = key;
-        }
-        if (value.find_first_of('"') != std::string::npos) {
-            parsed_line.value = value.substr(value.find_first_of('"') + 1, value.find_last_of('"') - value.find_first_of('"') - 1);
-        } else {
-            parsed_line.value = value;
-        }
+        parsed_line.key = key;
+        parsed_line.value = value;
 
-
-        // if(pos == std::string::npos) {
-        //     size_t quote = trimmed_line.find_first_of('"');
-        //     size_t quote_end = trimmed_line.find_last_of('"');
-        //     if (quote == std::string::npos and quote_end == std::string::npos) {
-        //         parsed_line.key = trim(trimmed_line.substr(quote, pos-1));
-        //         parsed_line.value = trim(trimmed_line.substr(pos + 1, quote_end));
-        //     }
-        // }
     }
 
     return parsed_line;
+}
+
+std::map<std::string, std::string>parse(const std::vector<std::string> &lines) {
+    std::map<std::string, std::string> result;
+
+    for (const auto& line : lines) {
+        ParsedLine parsed_line = parse_line(line);
+        if (parsed_line.type == LineType::KEY_VALUE) {
+            result[parsed_line.key] =parsed_line.value;
+        }
+    }
+
+    return result;
 }
 
 
@@ -131,13 +160,20 @@ int main() {
         R"(  "withSpaces"  :    "  spaced value  "  )"
     };
 
-    for (const auto& line : test_lines) {
-        ParsedLine parsed = parse_line(line);
-        std::cout << "Line: " << line << "\n";
-        std::cout << "  Type: " << to_string(parsed.type) << "\n";
-        std::cout << "  Key: [" << parsed.key << "]\n";
-        std::cout << "  Value: [" << parsed.value << "]\n\n";
+    std::map<std::string, std::string> test = parse(test_lines);
+
+    for (const auto& [key, value] : test) {
+        std::cout<< key << std::endl;
+        std::cout << value << std::endl;
     }
+
+    // for (const auto& line : test_lines) {
+    //     ParsedLine parsed = parse_line(line);
+    //     std::cout << "Line: " << line << "\n";
+    //     std::cout << "  Type: " << to_string(parsed.type) << "\n";
+    //     std::cout << "  Key: [" << parsed.key << "]\n";
+    //     std::cout << "  Value: [" << parsed.value << "]\n\n";
+    // }
     // const std::string test_data = "Lol:true";
     //
     // parse_line(test_data);
