@@ -1,10 +1,14 @@
+/*
+ refactoring
+ */
+
+
+#include <algorithm>
 #include <string>
 #include <vector>
 #include <fstream>
 #include <iostream>
 #include <map>
-
-
 
 enum class LineType {
     KEY_VALUE,
@@ -12,10 +16,21 @@ enum class LineType {
     UNKNOWN
 };
 
+enum class ValueType {
+    BOOLEAN,
+    STRING,
+    NUMBER
+};
+
 struct ParsedLine {
     LineType type;
     std::string key;
     std::string value;
+};
+
+struct ConfigValue {
+    ValueType type;
+    std::string raw;
 };
 
 std::string trim(const std::string& str) {
@@ -40,7 +55,7 @@ bool is_json(std::string& filename) {
 
 
     while (std::getline(file, line)) {
-        if (line[0] != '{' or line[0] != '[') return false;
+        if (line[0] != '{' and line[0] != '[') return false;
         else return true;
     }
 }
@@ -91,7 +106,7 @@ auto delete_quotes(const std::string &line) {
     }
 
     std::string key = trimmed_line.substr(0, pos);
-    std::string value = trimmed_line.substr(pos+1);
+    std::string value = trimmed_line.substr(pos+1, trimmed_line.length() - pos - 2);
 
     key = trim(key);
     value = trim(value);
@@ -121,6 +136,8 @@ ParsedLine parse_line(const std::string& line) {
 
     parsed_line.type = type;
 
+
+
     if (parsed_line.type == LineType::KEY_VALUE) {
 
         std::string key = delete_quotes(line).first;
@@ -134,38 +151,180 @@ ParsedLine parse_line(const std::string& line) {
     return parsed_line;
 }
 
-std::map<std::string, std::string>parse(const std::vector<std::string> &lines) {
-    std::map<std::string, std::string> result;
+ConfigValue detect_type(const std::string& value) {
+    ConfigValue parsed_line;
+    parsed_line.raw = trim(value);
+
+    if (parsed_line.raw == "true" || parsed_line.raw == "false") {
+        parsed_line.type = ValueType::BOOLEAN;
+    }
+    else if (!parsed_line.raw.empty() && std::all_of(parsed_line.raw.begin(), parsed_line.raw.end(), ::isdigit)) {
+        parsed_line.type = ValueType::NUMBER;
+    }
+    else {
+        parsed_line.type = ValueType::STRING;
+    }
+
+    return parsed_line;
+}
+
+std::map<std::string, ConfigValue>parse(const std::vector<std::string> &lines) {
+    std::map<std::string, ConfigValue> result;
 
     for (const auto& line : lines) {
         ParsedLine parsed_line = parse_line(line);
         if (parsed_line.type == LineType::KEY_VALUE) {
-            result[parsed_line.key] =parsed_line.value;
+            result[parsed_line.key] = detect_type(parsed_line.value);
         }
     }
 
     return result;
 }
 
+ConfigValue get_value(std::map<std::string, ConfigValue> &config, const std::string& key) {
+    //std::string result;
 
+    if (config.find(key) == config.end()) {
+        std::cerr << "Error, no value found for key: " << key << std::endl;
+        return {ValueType::STRING, ""};
+    }
+
+    //result = config[key];
+
+    return config[key];
+}
+
+void set_value(std::map<std::string, ConfigValue> &config, const std::string& key, const std::string& value) {
+    std::string result;
+
+    if (config.find(key) == config.end()) {
+        std::cerr << "Error, key not found: " << key << std::endl;
+        return;
+    }
+
+    //result = config[key] = value;
+
+    // result = config[key];
+
+    config[key] = detect_type(value);
+
+}
+
+void save_to_file(std::map<std::string, ConfigValue> &config, const std::string& filename) {
+    std::ofstream file;
+    int i = 1;
+
+    file.open(filename);
+
+    if (!file.is_open()) {
+        std::cerr << "Failed to open file: " << filename << std::endl;
+        return;
+    }
+
+    file << "{" << std::endl;
+
+    // for (const auto& [key, value] : config) {
+    //     if (i >= config.size()) {
+    //         file << "\"" << key << "\": " << "\"" << value << "\"" << std::endl;
+    //         break;
+    //     }
+    //     file << "\"" << key << "\": " << "\"" << value << "\"" << "," << std::endl;
+    //     i++;
+    // }
+
+    for (const auto& [key, value] : config) {
+        file << "  \"" << key << "\": ";
+
+        if (value.type == ValueType::STRING) file << "\"" << value.raw << "\"";
+        else file << value.raw;
+
+        if (i < config.size()) file << ",";
+        file << std::endl;
+    }
+
+    file << "}" << std::endl;
+
+    file.close();
+}
+
+/*
+ DOesnt work with value '{' and '['
+ input string values!!!
+ bugs
+*/
 
 int main() {
 
-    std::vector<std::string> test_lines = {
-        R"("name": "John")",
-        R"("age": 25)",
-        R"(isAdmin: true)",
-        R"(country: "USA")",
-        R"(empty: "")",
-        R"(  "withSpaces"  :    "  spaced value  "  )"
-    };
+    std::cout << "Welcome to json-parser!" << std::endl;
+    std::cout << "Please, enter path to file" << std::endl;
+    std::string filename;
+    getline(std::cin, filename);
+    std::map<std::string, ConfigValue> config = parse(load_file(filename));
+    std::cout << "File loaded and parsed" << std::endl;
 
-    std::map<std::string, std::string> test = parse(test_lines);
+    while (is_json(filename)) {
+        std::cout << "Please, enter:\n1 - Get value \n2 - Set value\n3 - Save to file\nq - to exit" << std::endl;
+        std::string user_input;
+        getline(std::cin, user_input);
 
-    for (const auto& [key, value] : test) {
-        std::cout<< key << std::endl;
-        std::cout << value << std::endl;
+        switch (user_input[0]) {
+            case '1': {
+                std::cout << "Enter the key: " << std::endl;
+                std::string key;
+                getline(std::cin, key);
+
+                ConfigValue value = get_value(config, key);
+
+                std::cout << "Value: " << value.raw << std::endl;
+                break;
+            }
+            case '2': {
+                std::string key, value;
+                std::cout << "Enter the key: " << std::endl;
+                getline(std::cin, key);
+                std::cout << "Enter the value: " << std::endl;
+                getline(std::cin, value);
+
+                set_value(config, key, value);
+
+                std::cout << "Value is update: " << get_value(config, key).raw << " = " << value << std::endl;
+                break;
+            }
+            case '3': {
+                std::string user_filename;
+                std::cout << "Enter the filename: " << std::endl;
+                getline(std::cin, user_filename);
+                save_to_file(config, user_filename);
+                std::cout << "File saved" << std::endl;
+                break;
+            }
+            case 'q': return 0;
+                default: std::cerr << "Invalid input" << std::endl;
+                return 1;
+        }
     }
+
+    // std::vector<std::string> test_lines = {
+    //     R"("name": "John")",
+    //     R"("age": 25)",
+    //     R"(isAdmin: true)",
+    //     R"(country: "USA")",
+    //     R"(empty: "")",
+    //     R"(  "withSpaces"  :    "  spaced value  "  )"
+    // };
+    //
+    // std::map<std::string, std::string> test = parse(test_lines);
+    //
+    // for (const auto& [key, value] : test) {
+    //     std::cout<< key << std::endl;
+    //     std::cout << value << std::endl;
+    // }
+    //
+    // std::cout << get_value(test, "isAdmin") << std::endl;
+    // set_value(test, "isAdmin", "LoL");
+    // std::cout << get_value(test, "isAdmin") << std::endl;
+    //
+    // save_to_file(test, "LolKek.json");
 
     // for (const auto& line : test_lines) {
     //     ParsedLine parsed = parse_line(line);
