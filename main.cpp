@@ -155,10 +155,17 @@ ConfigValue detect_type(const std::string& value) {
     ConfigValue parsed_line;
     parsed_line.raw = trim(value);
 
+    if (parsed_line.raw.empty()) {
+        parsed_line.type = ValueType::STRING;
+        return parsed_line;
+    }
+
+    size_t isSym = (parsed_line.raw[0] == '+' || parsed_line.raw[0] == '-') ? 1 : 0;
+
     if (parsed_line.raw == "true" || parsed_line.raw == "false") {
         parsed_line.type = ValueType::BOOLEAN;
     }
-    else if (!parsed_line.raw.empty() && std::all_of(parsed_line.raw.begin(), parsed_line.raw.end(), ::isdigit)) {
+    else if (isSym < parsed_line.raw.size() && std::all_of(parsed_line.raw.begin() + isSym, parsed_line.raw.end(), ::isdigit)) {
         parsed_line.type = ValueType::NUMBER;
     }
     else {
@@ -212,7 +219,6 @@ void set_value(std::map<std::string, ConfigValue> &config, const std::string& ke
 
 void save_to_file(std::map<std::string, ConfigValue> &config, const std::string& filename) {
     std::ofstream file;
-    int i = 1;
 
     file.open(filename);
 
@@ -223,15 +229,7 @@ void save_to_file(std::map<std::string, ConfigValue> &config, const std::string&
 
     file << "{" << std::endl;
 
-    // for (const auto& [key, value] : config) {
-    //     if (i >= config.size()) {
-    //         file << "\"" << key << "\": " << "\"" << value << "\"" << std::endl;
-    //         break;
-    //     }
-    //     file << "\"" << key << "\": " << "\"" << value << "\"" << "," << std::endl;
-    //     i++;
-    // }
-
+    int i = 1;
     for (const auto& [key, value] : config) {
         file << "  \"" << key << "\": ";
 
@@ -240,6 +238,7 @@ void save_to_file(std::map<std::string, ConfigValue> &config, const std::string&
 
         if (i < config.size()) file << ",";
         file << std::endl;
+        i++;
     }
 
     file << "}" << std::endl;
@@ -249,7 +248,6 @@ void save_to_file(std::map<std::string, ConfigValue> &config, const std::string&
 
 /*
  DOesnt work with value '{' and '['
- input string values!!!
  bugs
 */
 
@@ -303,44 +301,6 @@ int main() {
                 return 1;
         }
     }
-
-    // std::vector<std::string> test_lines = {
-    //     R"("name": "John")",
-    //     R"("age": 25)",
-    //     R"(isAdmin: true)",
-    //     R"(country: "USA")",
-    //     R"(empty: "")",
-    //     R"(  "withSpaces"  :    "  spaced value  "  )"
-    // };
-    //
-    // std::map<std::string, std::string> test = parse(test_lines);
-    //
-    // for (const auto& [key, value] : test) {
-    //     std::cout<< key << std::endl;
-    //     std::cout << value << std::endl;
-    // }
-    //
-    // std::cout << get_value(test, "isAdmin") << std::endl;
-    // set_value(test, "isAdmin", "LoL");
-    // std::cout << get_value(test, "isAdmin") << std::endl;
-    //
-    // save_to_file(test, "LolKek.json");
-
-    // for (const auto& line : test_lines) {
-    //     ParsedLine parsed = parse_line(line);
-    //     std::cout << "Line: " << line << "\n";
-    //     std::cout << "  Type: " << to_string(parsed.type) << "\n";
-    //     std::cout << "  Key: [" << parsed.key << "]\n";
-    //     std::cout << "  Value: [" << parsed.value << "]\n\n";
-    // }
-    // const std::string test_data = "Lol:true";
-    //
-    // parse_line(test_data);
-
-    // std::string filename;
-    // std::getline(std::cin, filename);
-    // load_file(filename);
-    // std::cout << is_json(filename);
 
     return 0;
 }
