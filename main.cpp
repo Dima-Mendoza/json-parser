@@ -137,7 +137,7 @@ auto delete_quotes(const std::string &line) {
 
     return result;
     /*
-    find_first and find_last can return minus statament and it give UB!!!
+    find_first and find_last can return minus statament and it give UB!
     */
 
 }
