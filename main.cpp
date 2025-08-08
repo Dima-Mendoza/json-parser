@@ -167,8 +167,19 @@ ConfigValue detect_type(const std::string& value) {
         parsed_line.type = ValueType::NUMBER;
     }
     else {
+        // size_t pos = parsed_line.raw.find_first_of(':');
+        // std::string temp_value = parsed_line.raw.substr(pos+2);
+
+        // if(temp_value.front() == '[') {
+        //     parsed_line.type = ValueType::ARRAY;
+        // }
         parsed_line.type = ValueType::STRING;
     }
+
+    /*
+    size_t pos = parser_line.raw.find_first_of(':');
+    if(parsed_line.raw.substr(pos+1).front('[') parsed_line.type = ValueType::ARRAY;
+    */
 
     return parsed_line;
 }
@@ -203,6 +214,9 @@ std::map<std::string, ConfigValue>parse(const std::vector<std::string> &lines) {
         ParsedLine parsed_line = parse_line(line);
         if (parsed_line.type == LineType::KEY_VALUE) { //If in second had array or object go to function for this objects otherwise do this line to string
             ConfigValue detected_value = detect_type(trim(parsed_line.value));
+            /*
+            if (detected_value.type == ValueType::ARRAY) {???}
+            */
             if (detected_value.arrayValues.empty() or detected_value.objectValues.empty()) {
                 detected_value.type = ValueType::STRING;
                 result[parsed_line.key] = detected_value;
