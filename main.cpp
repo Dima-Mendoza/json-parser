@@ -1,6 +1,19 @@
 /*
- refactoring
- */
+ * TODO
+ * Lexer
+ * Recursive descent
+ * Tokenaizer
+ * Solve bugs
+ * Stage 0 - Refactoring
+ * Stage 1 - tokenizer
+ * Stage 2 - recursive descent
+ * Stage 3 - Api
+ * Stage 4 - Errors
+ * Stage 5 - Tests
+ * Stage 6 - Refactoring container
+ *
+ * Check TODO.md
+*/
 
 
 #include <algorithm>
@@ -10,300 +23,346 @@
 #include <iostream>
 #include <map>
 
-enum class LineType {
-    KEY_VALUE,
-    EMPTY,
-    UNKNOWN
-};
+namespace jp {
+    namespace types {
+        enum class LineType {
+            KEY_VALUE,
+            EMPTY,
+            UNKNOWN
+        };
 
-enum class ValueType {
-    BOOLEAN,
-    STRING,
-    NUMBER,
-    ARRAY,
-    OBJECT
-};
+        enum class ValueType {
+            BOOLEAN,
+            STRING,
+            NUMBER,
+            ARRAY,
+            OBJECT
+        };
 
-struct ParsedLine {
-    LineType type;
-    std::string key;
-    std::string value;
-};
+        enum class TokenKind {
+            LBrace, RBrace, LBracket, RBracket, Colon, Comma,
+            String, Number, True, False, Null, Eof, Error
+        };
 
-struct ConfigValue {
-    ValueType type;
-    std::string raw;
-    std::vector<ConfigValue> arrayValues;
-    std::map<std::string, ConfigValue> objectValues;
-};
+        struct ParsedLine {
+            LineType type;
+            std::string key;
+            std::string value;
+        };
 
-std::string trim(const std::string& str) {
-    size_t start = str.find_first_not_of(' ');
-    size_t end = str.find_last_not_of(' ');
+        struct ConfigValue {
+            ValueType type;
+            std::string raw;
+            std::vector<ConfigValue> arrayValues;
+            std::map<std::string, ConfigValue> objectValues;
+        };
 
-    if (start == std::string::npos) return "";
-
-    return str.substr(start, end - start + 1);
-}
-
-bool is_json(std::string& filename) {
-    std::ifstream file(filename);
-
-    if (!file.is_open()) {
-        std::cerr << "Failed to open file: " << filename << std::endl;
-        return false;
+        struct Token {
+            TokenKind kind;
+            std::string lexeme;
+            size_t pos{};
+        };
     }
 
-    std::string line;
+    namespace util {
+        struct Cursor {
+            const std::string& s;
+            size_t i{0};
 
+            bool eof() const {return i >= s.size();}
+            bool peek() const {return eof() ? '\0' : s[i];}
 
+            char get() {return eof() ? '\0' : s[i++];}
+        };
 
-    while (std::getline(file, line)) {
-        if (line[0] != '{' and line[0] != '[') return false;
-        else return true;
-    }
-}
-
-std::vector<std::string> load_file(std::string& filename) {
-    std::ifstream file(filename);
-
-    if (!file.is_open()) {
-        return {};
-    }
-
-    std::string line;
-    std::vector<std::string> lines;
-    while (std::getline(file, line)) {
-        lines.push_back(line);
-    }
-
-    return lines;
-}
-
-LineType classify_line(const std::string& line) {
-    std::string trimmed_line = trim(line);
-
-    if (trimmed_line.empty()) return LineType::EMPTY;
-    else if (trimmed_line.find_first_of(':') != std::string::npos) return LineType::KEY_VALUE;
-    else return LineType::UNKNOWN;
-}
-
-std::string to_string(LineType type) {
-    switch (type) {
-            case LineType::KEY_VALUE: return "KEY_VALUE";
-            case LineType::EMPTY: return "EMPTY";
-            case LineType::UNKNOWN: return "UNKNOWN";
-    }
-}
-
-auto delete_quotes(const std::string &line) {
-
-    std::pair<std::string, std::string> result;
-
-    std::string trimmed_line = trim(line);
-
-    size_t pos = trimmed_line.find_first_of(':');
-
-    if (pos == std::string::npos) {
-        std::cerr << "Error, pos is npos";
-        return result;
-    }
-
-    std::string key = trimmed_line.substr(0, pos);
-    std::string value = trimmed_line.substr(pos+1);
-
-    key = trim(key);
-    value = trim(value);
-
-    // if (key.size() > 2 && key.front() == '"' && key.back() == '"') {
-    //     key = key.substr(1, key.size() - 2);
-    // }
-
-    if (key.find_first_of('"') != std::string::npos) {
-        key = key.substr(key.find_first_of('"') + 1, key.find_last_of('"') - key.find_first_of('"') - 1);
-    }
-
-    if (value.find_first_of('"') != std::string::npos) {
-        // if (!value.empty() && value.front() == '"') value = value;
-        value = value.substr(value.find_first_of('"') + 1, value.find_last_of('"') - value.find_first_of('"') - 1);
-    }
-
-    if (!value.empty() && value.back() == ',') {
-        value.pop_back();
-    }
-
-    result.first = key;
-    result.second = value;
-
-    return result;
-    /*
-    find_first and find_last can return minus statament and it give UB!
-    */
-
-}
-
-ConfigValue detect_type(const std::string& value) {
-    ConfigValue parsed_line;
-    parsed_line.raw = trim(value);
-
-    if (parsed_line.raw.empty()) {
-        parsed_line.type = ValueType::STRING;
-        return parsed_line;
-    }
-
-    size_t isSym = (parsed_line.raw[0] == '+' || parsed_line.raw[0] == '-') ? 1 : 0;
-
-    if (parsed_line.raw == "true" || parsed_line.raw == "false") {
-        parsed_line.type = ValueType::BOOLEAN;
-    }
-    else if (parsed_line.raw[0] == '{' && parsed_line.raw[0] != '"') {
-        parsed_line.type = ValueType::OBJECT;
-        //RECURSION ADD objectValues
-    }
-    else if (parsed_line.raw[0] == '[' && parsed_line.raw[0] != '"') {
-        parsed_line.type = ValueType::ARRAY;
-    }
-    else if (isSym < parsed_line.raw.size() && std::all_of(parsed_line.raw.begin() + isSym, parsed_line.raw.end(), ::isdigit)) {
-        parsed_line.type = ValueType::NUMBER;
-    }
-    else {
-        // size_t pos = parsed_line.raw.find_first_of(':');
-        // std::string temp_value = parsed_line.raw.substr(pos+2);
-
-        // if(temp_value.front() == '[') {
-        //     parsed_line.type = ValueType::ARRAY;
-        // }
-        parsed_line.type = ValueType::STRING;
-    }
-
-    /*
-    size_t pos = parser_line.raw.find_first_of(':');
-    if(parsed_line.raw.substr(pos+1).front('[') parsed_line.type = ValueType::ARRAY;
-    */
-
-    return parsed_line;
-}
-
-ParsedLine parse_line(const std::string& line) {
-    ParsedLine parsed_line;
-    ConfigValue value_type = detect_type(line);
-    LineType type = classify_line(line);
-    // std::string trimmed_line = trim(line);
-
-    parsed_line.type = type;
-
-
-
-    if (parsed_line.type == LineType::KEY_VALUE) {
-
-        std::string key = delete_quotes(line).first;
-        std::string value = delete_quotes(line).second;
-
-        parsed_line.key = key;
-        parsed_line.value = value;
-
-    }
-
-    return parsed_line;
-}
-
-std::map<std::string, ConfigValue>parse(const std::vector<std::string> &lines) {
-    std::map<std::string, ConfigValue> result;
-
-    for (const auto& line : lines) {
-        ParsedLine parsed_line = parse_line(line);
-        if (parsed_line.type == LineType::KEY_VALUE) { //If in second had array or object go to function for this objects otherwise do this line to string
-            ConfigValue detected_value = detect_type(trim(parsed_line.value));
-            /*
-            if (detected_value.type == ValueType::ARRAY) {???}
-            */
-            if (detected_value.arrayValues.empty() or detected_value.objectValues.empty()) {
-                detected_value.type = ValueType::STRING;
-                result[parsed_line.key] = detected_value;
+        void skip_whitespace(Cursor& c) {
+            while (!c.eof()) {
+                char ch = c.peek();
+                if (ch==' '||ch=='\t'||ch=='\n'||ch=='\r') {
+                    c.get();
+                }
+                else break;
             }
-            result[parsed_line.key] = detect_type(trim(parsed_line.value));
         }
-        else if (parsed_line.type == LineType::UNKNOWN) {
-            // ConfigValue value_type = detect_type(trim(parsed_line.value));
-            // if (value_type.type == ValueType::OBJECT) {
-            //
-            // }
-            // result[""] = detected_type(trim(parsed_line.value);
-            std::cout << "[" << line << "]" << std::endl;
 
+        std::string trim(const std::string& str) {
+            size_t start = str.find_first_not_of(" \t\r\n");
+            size_t end = str.find_last_not_of(" \t\r\n");
+
+            if (start == std::string::npos) return "";
+
+            return str.substr(start, end - start + 1);
+        }
+
+        types::LineType classify_line(const std::string& line) {
+            std::string trimmed_line = trim(line);
+
+            if (trimmed_line.empty()) return types::LineType::EMPTY;
+            else if (trimmed_line.find_first_of(':') != std::string::npos) return types::LineType::KEY_VALUE;
+            else return types::LineType::UNKNOWN;
+        }
+
+        std::string to_string(types::LineType type) {
+            switch (type) {
+                case types::LineType::KEY_VALUE: return "KEY_VALUE";
+                case types::LineType::EMPTY: return "EMPTY";
+                case types::LineType::UNKNOWN: return "UNKNOWN";
+            }
         }
     }
 
-    return result;
-}
+    namespace io {
+        bool is_json(std::string& filename) {
+            std::ifstream file(filename);
 
-ConfigValue get_value(std::map<std::string, ConfigValue> &config, const std::string& key) {
-    //std::string result;
+            if (!file.is_open()) {
+                std::cerr << "Failed to open file: " << filename << std::endl;
+                return false;
+            }
 
-    if (config.find(key) == config.end()) {
-        std::cerr << "Error, no value found for key: " << key << std::endl;
-        return {ValueType::STRING, ""};
+            std::string first_non_empty;
+
+            while (std::getline(file, first_non_empty)) {
+                first_non_empty = first_non_empty.erase(0, first_non_empty.find_first_of(" \t\r\n"));
+                if (!first_non_empty.empty()) break;
+            }
+
+            if (first_non_empty.empty()) return false;
+
+            char c = first_non_empty[0];
+            return (c == '[' || c == '{');
+        }
+
+        std::vector<std::string> load_file(std::string& filename) {
+            std::ifstream file(filename);
+
+            if (!file.is_open()) {
+                return {};
+            }
+
+            std::string line;
+            std::vector<std::string> lines;
+            while (std::getline(file, line)) {
+                lines.push_back(line);
+            }
+
+            return lines;
+        }
+
+        //Save to file function
+        /*
+        void save_to_file(std::map<std::string, ConfigValue> &config, const std::string& filename) {
+        std::ofstream file;
+
+        file.open(filename);
+
+        if (!file.is_open()) {
+            std::cerr << "Failed to open file: " << filename << std::endl;
+            return;
+        }
+
+        file << "{" << std::endl;
+
+        int i = 1;
+        for (const auto& [key, value] : config) {
+            file << "  \"" << key << "\": ";
+
+            if (value.type == ValueType::STRING) file << "\"" << value.raw << "\"";
+            else file << value.raw;
+
+            if (i < config.size()) file << ",";
+            file << std::endl;
+            i++;
+        }
+
+        file << "}" << std::endl;
+
+        file.close();
+    }
+         **/
+
     }
 
-    //result = config[key];
 
-    return config[key];
-}
+    /*--------------------------------------------------------------------*/
 
-void set_value(std::map<std::string, ConfigValue> &config, const std::string& key, const std::string& value) {
-    std::string result;
+    namespace parser {
 
-    if (config.find(key) == config.end()) {
-        std::cerr << "Error, key not found: " << key << std::endl;
-        return;
+        auto delete_quotes(const std::string &line) {
+
+            std::pair<std::string, std::string> result;
+
+            std::string trimmed_line = trim(line);
+
+            size_t pos = trimmed_line.find_first_of(':');
+
+            if (pos == std::string::npos) {
+                std::cerr << "Error, pos is npos";
+                return result;
+            }
+
+            std::string key = trimmed_line.substr(0, pos);
+            std::string value = trimmed_line.substr(pos+1);
+
+            key = trim(key);
+            value = trim(value);
+
+            if (key.find_first_of('"') != std::string::npos) {
+                key = key.substr(key.find_first_of('"') + 1, key.find_last_of('"') - key.find_first_of('"') - 1);
+            }
+
+            if (value.find_first_of('"') != std::string::npos) {
+                value = value.substr(value.find_first_of('"') + 1, value.find_last_of('"') - value.find_first_of('"') - 1);
+            }
+
+            if (!value.empty() && value.back() == ',') {
+                value.pop_back();
+            }
+
+            result.first = key;
+            result.second = value;
+
+            return result;
+            /*
+            find_first and find_last can return minus statament and it give UB!
+            */
+
+        }
+
+        ConfigValue detect_type(const std::string& value) {
+            ConfigValue parsed_line;
+            parsed_line.raw = trim(value);
+
+            if (parsed_line.raw.empty()) {
+                parsed_line.type = ValueType::STRING;
+                return parsed_line;
+            }
+
+            size_t isSym = (parsed_line.raw[0] == '+' || parsed_line.raw[0] == '-') ? 1 : 0;
+
+            if (parsed_line.raw == "true" || parsed_line.raw == "false") {
+                parsed_line.type = ValueType::BOOLEAN;
+            }
+            else if (parsed_line.raw[0] == '{' && parsed_line.raw[0] != '"') {
+                parsed_line.type = ValueType::OBJECT;
+                //RECURSION ADD objectValues
+            }
+            else if (parsed_line.raw[0] == '[' && parsed_line.raw[0] != '"') {
+                parsed_line.type = ValueType::ARRAY;
+            }
+            else if (isSym < parsed_line.raw.size() && std::all_of(parsed_line.raw.begin() + isSym, parsed_line.raw.end(), ::isdigit)) {
+                parsed_line.type = ValueType::NUMBER;
+            }
+            else {
+                // size_t pos = parsed_line.raw.find_first_of(':');
+                // std::string temp_value = parsed_line.raw.substr(pos+2);
+
+                // if(temp_value.front() == '[') {
+                //     parsed_line.type = ValueType::ARRAY;
+                // }
+                parsed_line.type = ValueType::STRING;
+            }
+
+            /*
+            size_t pos = parser_line.raw.find_first_of(':');
+            if(parsed_line.raw.substr(pos+1).front('[') parsed_line.type = ValueType::ARRAY;
+            */
+
+            return parsed_line;
+        }
+
+        ParsedLine parse_line(const std::string& line) {
+            ParsedLine parsed_line;
+            ConfigValue value_type = detect_type(line);
+            LineType type = classify_line(line);
+            // std::string trimmed_line = trim(line);
+
+            parsed_line.type = type;
+
+
+
+            if (parsed_line.type == LineType::KEY_VALUE) {
+
+                std::string key = delete_quotes(line).first;
+                std::string value = delete_quotes(line).second;
+
+                parsed_line.key = key;
+                parsed_line.value = value;
+
+            }
+
+            return parsed_line;
+        }
+
+        std::map<std::string, ConfigValue>parse(const std::vector<std::string> &lines) {
+            std::map<std::string, ConfigValue> result;
+
+            for (const auto& line : lines) {
+                ParsedLine parsed_line = parse_line(line);
+                if (parsed_line.type == LineType::KEY_VALUE) { //If in second had array or object go to function for this objects otherwise do this line to string
+                    ConfigValue detected_value = detect_type(trim(parsed_line.value));
+                    /*
+                    if (detected_value.type == ValueType::ARRAY) {???}
+                    */
+                    if (detected_value.arrayValues.empty() or detected_value.objectValues.empty()) {
+                        detected_value.type = ValueType::STRING;
+                        result[parsed_line.key] = detected_value;
+                    }
+                    result[parsed_line.key] = detect_type(trim(parsed_line.value));
+                }
+                else if (parsed_line.type == LineType::UNKNOWN) {
+                    // ConfigValue value_type = detect_type(trim(parsed_line.value));
+                    // if (value_type.type == ValueType::OBJECT) {
+                    //
+                    // }
+                    // result[""] = detected_type(trim(parsed_line.value);
+                    std::cout << "[" << line << "]" << std::endl;
+
+                }
+            }
+
+            return result;
+        }
+
     }
 
-    //result = config[key] = value;
+    namespace api {
+        ConfigValue get_value(std::map<std::string, ConfigValue> &config, const std::string& key) {
+            //std::string result;
 
-    // result = config[key];
+            if (config.find(key) == config.end()) {
+                std::cerr << "Error, no value found for key: " << key << std::endl;
+                return {ValueType::STRING, ""};
+            }
 
-    config[key] = detect_type(value);
+            //result = config[key];
 
+            return config[key];
+        }
+
+        void set_value(std::map<std::string, ConfigValue> &config, const std::string& key, const std::string& value) {
+            std::string result;
+
+            if (config.find(key) == config.end()) {
+                std::cerr << "Error, key not found: " << key << std::endl;
+                return;
+            }
+
+            //result = config[key] = value;
+
+            // result = config[key];
+
+            config[key] = detect_type(value);
+
+        }}
 }
 
-void save_to_file(std::map<std::string, ConfigValue> &config, const std::string& filename) {
-    std::ofstream file;
 
-    file.open(filename);
+ //Namespace jp
 
-    if (!file.is_open()) {
-        std::cerr << "Failed to open file: " << filename << std::endl;
-        return;
-    }
-
-    file << "{" << std::endl;
-
-    int i = 1;
-    for (const auto& [key, value] : config) {
-        file << "  \"" << key << "\": ";
-
-        if (value.type == ValueType::STRING) file << "\"" << value.raw << "\"";
-        else file << value.raw;
-
-        if (i < config.size()) file << ",";
-        file << std::endl;
-        i++;
-    }
-
-    file << "}" << std::endl;
-
-    file.close();
-}
-
-/*
- DOesnt work with value '{' and '[', add to ValueType new types(ARRAY and OBJECT) and add to StructValue new data
-    std::vector<ConfigValue> arrayValues;
-    std::map<std::string, ConfigValue> objectValues;
-    create recursion function
- bugs
-*/
 
 int main() {
+    using namespace jp;
 
     std::cout << "Welcome to json-parser!" << std::endl;
     std::cout << "Please, enter path to file" << std::endl;
