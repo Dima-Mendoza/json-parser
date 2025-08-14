@@ -19,7 +19,9 @@ enum class LineType {
 enum class ValueType {
     BOOLEAN,
     STRING,
-    NUMBER
+    NUMBER,
+    ARRAY,
+    OBJECT
 };
 
 struct ParsedLine {
@@ -31,6 +33,8 @@ struct ParsedLine {
 struct ConfigValue {
     ValueType type;
     std::string raw;
+    std::vector<ConfigValue> arrayValues;
+    std::map<std::string, ConfigValue> objectValues;
 };
 
 std::string trim(const std::string& str) {
@@ -106,17 +110,26 @@ auto delete_quotes(const std::string &line) {
     }
 
     std::string key = trimmed_line.substr(0, pos);
-    std::string value = trimmed_line.substr(pos+1, trimmed_line.length() - pos - 2);
+    std::string value = trimmed_line.substr(pos+1);
 
     key = trim(key);
     value = trim(value);
+
+    // if (key.size() > 2 && key.front() == '"' && key.back() == '"') {
+    //     key = key.substr(1, key.size() - 2);
+    // }
 
     if (key.find_first_of('"') != std::string::npos) {
         key = key.substr(key.find_first_of('"') + 1, key.find_last_of('"') - key.find_first_of('"') - 1);
     }
 
     if (value.find_first_of('"') != std::string::npos) {
+        // if (!value.empty() && value.front() == '"') value = value;
         value = value.substr(value.find_first_of('"') + 1, value.find_last_of('"') - value.find_first_of('"') - 1);
+    }
+
+    if (!value.empty() && value.back() == ',') {
+        value.pop_back();
     }
 
     result.first = key;
@@ -129,8 +142,51 @@ auto delete_quotes(const std::string &line) {
 
 }
 
+ConfigValue detect_type(const std::string& value) {
+    ConfigValue parsed_line;
+    parsed_line.raw = trim(value);
+
+    if (parsed_line.raw.empty()) {
+        parsed_line.type = ValueType::STRING;
+        return parsed_line;
+    }
+
+    size_t isSym = (parsed_line.raw[0] == '+' || parsed_line.raw[0] == '-') ? 1 : 0;
+
+    if (parsed_line.raw == "true" || parsed_line.raw == "false") {
+        parsed_line.type = ValueType::BOOLEAN;
+    }
+    else if (parsed_line.raw[0] == '{' && parsed_line.raw[0] != '"') {
+        parsed_line.type = ValueType::OBJECT;
+        //RECURSION ADD objectValues
+    }
+    else if (parsed_line.raw[0] == '[' && parsed_line.raw[0] != '"') {
+        parsed_line.type = ValueType::ARRAY;
+    }
+    else if (isSym < parsed_line.raw.size() && std::all_of(parsed_line.raw.begin() + isSym, parsed_line.raw.end(), ::isdigit)) {
+        parsed_line.type = ValueType::NUMBER;
+    }
+    else {
+        // size_t pos = parsed_line.raw.find_first_of(':');
+        // std::string temp_value = parsed_line.raw.substr(pos+2);
+
+        // if(temp_value.front() == '[') {
+        //     parsed_line.type = ValueType::ARRAY;
+        // }
+        parsed_line.type = ValueType::STRING;
+    }
+
+    /*
+    size_t pos = parser_line.raw.find_first_of(':');
+    if(parsed_line.raw.substr(pos+1).front('[') parsed_line.type = ValueType::ARRAY;
+    */
+
+    return parsed_line;
+}
+
 ParsedLine parse_line(const std::string& line) {
     ParsedLine parsed_line;
+    ConfigValue value_type = detect_type(line);
     LineType type = classify_line(line);
     // std::string trimmed_line = trim(line);
 
@@ -151,37 +207,30 @@ ParsedLine parse_line(const std::string& line) {
     return parsed_line;
 }
 
-ConfigValue detect_type(const std::string& value) {
-    ConfigValue parsed_line;
-    parsed_line.raw = trim(value);
-
-    if (parsed_line.raw.empty()) {
-        parsed_line.type = ValueType::STRING;
-        return parsed_line;
-    }
-
-    size_t isSym = (parsed_line.raw[0] == '+' || parsed_line.raw[0] == '-') ? 1 : 0;
-
-    if (parsed_line.raw == "true" || parsed_line.raw == "false") {
-        parsed_line.type = ValueType::BOOLEAN;
-    }
-    else if (isSym < parsed_line.raw.size() && std::all_of(parsed_line.raw.begin() + isSym, parsed_line.raw.end(), ::isdigit)) {
-        parsed_line.type = ValueType::NUMBER;
-    }
-    else {
-        parsed_line.type = ValueType::STRING;
-    }
-
-    return parsed_line;
-}
-
 std::map<std::string, ConfigValue>parse(const std::vector<std::string> &lines) {
     std::map<std::string, ConfigValue> result;
 
     for (const auto& line : lines) {
         ParsedLine parsed_line = parse_line(line);
-        if (parsed_line.type == LineType::KEY_VALUE) {
-            result[parsed_line.key] = detect_type(parsed_line.value);
+        if (parsed_line.type == LineType::KEY_VALUE) { //If in second had array or object go to function for this objects otherwise do this line to string
+            ConfigValue detected_value = detect_type(trim(parsed_line.value));
+            /*
+            if (detected_value.type == ValueType::ARRAY) {???}
+            */
+            if (detected_value.arrayValues.empty() or detected_value.objectValues.empty()) {
+                detected_value.type = ValueType::STRING;
+                result[parsed_line.key] = detected_value;
+            }
+            result[parsed_line.key] = detect_type(trim(parsed_line.value));
+        }
+        else if (parsed_line.type == LineType::UNKNOWN) {
+            // ConfigValue value_type = detect_type(trim(parsed_line.value));
+            // if (value_type.type == ValueType::OBJECT) {
+            //
+            // }
+            // result[""] = detected_type(trim(parsed_line.value);
+            std::cout << "[" << line << "]" << std::endl;
+
         }
     }
 
@@ -247,7 +296,10 @@ void save_to_file(std::map<std::string, ConfigValue> &config, const std::string&
 }
 
 /*
- DOesnt work with value '{' and '['
+ DOesnt work with value '{' and '[', add to ValueType new types(ARRAY and OBJECT) and add to StructValue new data
+    std::vector<ConfigValue> arrayValues;
+    std::map<std::string, ConfigValue> objectValues;
+    create recursion function
  bugs
 */
 
