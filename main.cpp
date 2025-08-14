@@ -12,6 +12,12 @@
  * Stage 5 - Tests
  * Stage 6 - Refactoring container
  *
+ *
+ *
+ /// @brief One line description
+ /// @param x description
+ /// @return result description
+ *
  * Check TODO.md
 */
 
@@ -69,12 +75,15 @@ namespace jp {
             const std::string& s;
             size_t i{0};
 
-            bool eof() const {return i >= s.size();}
-            bool peek() const {return eof() ? '\0' : s[i];}
+            [[nodiscard]] bool eof() const {return i >= s.size();}
 
+            [[nodiscard]] char peek() const {return eof() ? '\0' : s[i];}
             char get() {return eof() ? '\0' : s[i++];}
         };
 
+        /// @brief skip special symbols and whitespace
+/// @param c char for analysis
+/// @return nothing
         void skip_whitespace(Cursor& c) {
             while (!c.eof()) {
                 char ch = c.peek();
@@ -85,33 +94,13 @@ namespace jp {
             }
         }
 
-        std::string trim(const std::string& str) {
-            size_t start = str.find_first_not_of(" \t\r\n");
-            size_t end = str.find_last_not_of(" \t\r\n");
-
-            if (start == std::string::npos) return "";
-
-            return str.substr(start, end - start + 1);
-        }
-
-        types::LineType classify_line(const std::string& line) {
-            std::string trimmed_line = trim(line);
-
-            if (trimmed_line.empty()) return types::LineType::EMPTY;
-            else if (trimmed_line.find_first_of(':') != std::string::npos) return types::LineType::KEY_VALUE;
-            else return types::LineType::UNKNOWN;
-        }
-
-        std::string to_string(types::LineType type) {
-            switch (type) {
-                case types::LineType::KEY_VALUE: return "KEY_VALUE";
-                case types::LineType::EMPTY: return "EMPTY";
-                case types::LineType::UNKNOWN: return "UNKNOWN";
-            }
-        }
     }
 
     namespace io {
+
+        /// @brief check json function
+        /// @param filename name of loaded file
+        /// @return return true or false
         bool is_json(std::string& filename) {
             std::ifstream file(filename);
 
@@ -133,6 +122,9 @@ namespace jp {
             return (c == '[' || c == '{');
         }
 
+        /// @brief load file
+        /// @param filename name of loaded file
+        /// @return return lines of file
         std::vector<std::string> load_file(std::string& filename) {
             std::ifstream file(filename);
 
@@ -183,6 +175,39 @@ namespace jp {
 
     }
 
+    namespace parser {
+
+        void scan_string_simple(std::string& str) {
+            
+        }
+
+
+        /// @brief Tokenaizer
+        /// @param c char symbol of line
+        /// @return return token
+        types::Token next_token(util::Cursor& c) {
+            skip_whitespace(c);
+            size_t start = c.i;
+
+            if (c.eof()) {
+                return {types::TokenKind::Eof, "", start};
+            }
+
+            char ch = c.get();
+            switch (ch) {
+                case '{': return {types::TokenKind::LBrace, "{", start};
+                case '}': return {types::TokenKind::RBrace, "}", start};
+                case '[': return {types::TokenKind::LBracket, "[", start};
+                case ']': return {types::TokenKind::RBracket, "]", start};
+                case ':': return {types::TokenKind::Colon, ":", start};
+                case ',': return {types::TokenKind::Comma, ",", start};
+                default:
+                    return {types::TokenKind::Error, std::string(1, ch), start};
+            }
+        }
+
+
+    }
 
     /*--------------------------------------------------------------------*/
 
@@ -355,10 +380,7 @@ namespace jp {
             config[key] = detect_type(value);
 
         }}
-}
-
-
- //Namespace jp
+} //Namespace jp
 
 
 int main() {
