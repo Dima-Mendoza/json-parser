@@ -33,6 +33,13 @@ struct ConfigValue {
     std::string raw;
 };
 
+struct ScanState {
+    int obj = 0;
+    int arr = 0;
+    bool inStr = false;
+    bool esc = false;
+};
+
 std::string trim(const std::string& str) {
     size_t start = str.find_first_not_of(' ');
     size_t end = str.find_last_not_of(' ');
@@ -76,14 +83,6 @@ std::vector<std::string> load_file(std::string& filename) {
     return lines;
 }
 
-LineType classify_line(const std::string& line) {
-    std::string trimmed_line = trim(line);
-
-    if (trimmed_line.empty()) return LineType::EMPTY;
-    else if (trimmed_line.find_first_of(':') != std::string::npos) return LineType::KEY_VALUE;
-    else return LineType::UNKNOWN;
-}
-
 std::string to_string(LineType type) {
     switch (type) {
             case LineType::KEY_VALUE: return "KEY_VALUE";
@@ -92,63 +91,55 @@ std::string to_string(LineType type) {
     }
 }
 
-auto delete_quotes(const std::string &line) {
-
-    std::pair<std::string, std::string> result;
-
-    std::string trimmed_line = trim(line);
-
-    size_t pos = trimmed_line.find_first_of(':');
-
-    if (pos == std::string::npos) {
-        std::cerr << "Error, pos is npos";
-        return result;
+void advance_state(ScanState& state, char ch) {
+    if (state.inStr) {
+        if (state.esc) {
+            state.esc = false;
+            return;
+        }
+        if (ch == '\\') {
+            state.esc = true;
+            return;
+        }
+        if (ch == '"') {
+            state.inStr = false;
+            return;
+        }
+        return;
     }
 
-    std::string key = trimmed_line.substr(0, pos);
-    std::string value = trimmed_line.substr(pos+1, trimmed_line.length() - pos - 2);
-
-    key = trim(key);
-    value = trim(value);
-
-    if (key.find_first_of('"') != std::string::npos) {
-        key = key.substr(key.find_first_of('"') + 1, key.find_last_of('"') - key.find_first_of('"') - 1);
+    if (ch == '"') {
+        state.inStr = true;
+        state.esc = false;
+        return;
     }
 
-    if (value.find_first_of('"') != std::string::npos) {
-        value = value.substr(value.find_first_of('"') + 1, value.find_last_of('"') - value.find_first_of('"') - 1);
+    switch (ch) {
+        case '{': ++state.obj; break;
+        case '}': if (state.obj > 0) --state.obj; break;
+        case '[': ++state.arr; break;
+        case ']': if (state.arr > 0) --state.arr; break;
+        default: /*ignore*/ break;
     }
-
-    result.first = key;
-    result.second = value;
-
-    return result;
-    /*
-    find_first and find_last can return minus statament and it give UB!
-    */
 
 }
 
-ParsedLine parse_line(const std::string& line) {
-    ParsedLine parsed_line;
-    LineType type = classify_line(line);
-    // std::string trimmed_line = trim(line);
-
-    parsed_line.type = type;
-
-
-
-    if (parsed_line.type == LineType::KEY_VALUE) {
-
-        std::string key = delete_quotes(line).first;
-        std::string value = delete_quotes(line).second;
-
-        parsed_line.key = key;
-        parsed_line.value = value;
-
+int find_colon_outside_string(const std::string& s) {
+    ScanState state;
+    for (size_t i = 0; i < s.size(); ++i) {
+        char ch = s[i];
+        if (!state.inStr && state.obj == 0 && state.arr == 0 && ch == ':') {
+            return static_cast<int>(i);
+        }
+        advance_state(state, ch);
     }
+    return -1;
+}
 
-    return parsed_line;
+std::vector<std::pair<std::string, std::string>>
+collect_top_level_pairs(const std::vector<std::string>& lines) {
+
+    
 }
 
 ConfigValue detect_type(const std::string& value) {
@@ -178,11 +169,9 @@ ConfigValue detect_type(const std::string& value) {
 std::map<std::string, ConfigValue>parse(const std::vector<std::string> &lines) {
     std::map<std::string, ConfigValue> result;
 
-    for (const auto& line : lines) {
-        ParsedLine parsed_line = parse_line(line);
-        if (parsed_line.type == LineType::KEY_VALUE) {
-            result[parsed_line.key] = detect_type(parsed_line.value);
-        }
+    auto pairs = collect_top_level_pairs(lines);
+    for (auto& [key, raw_value] : pairs) {
+        result[key] = detect_type(raw_value);
     }
 
     return result;
