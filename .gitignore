@@ -2,3 +2,13 @@ cmake-build-debug
 .idea
 TestData
 *.md
+.clang
+.github
+.vscode
+tools
+.editorconfig
+.gitattributes
+.gitignore
+*.json
+build
+

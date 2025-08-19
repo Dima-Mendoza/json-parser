@@ -19,7 +19,9 @@ enum class LineType {
 enum class ValueType {
     BOOLEAN,
     STRING,
-    NUMBER
+    NUMBER,
+    ARRAY,
+    OBJECT
 };
 
 struct ParsedLine {
@@ -31,6 +33,8 @@ struct ParsedLine {
 struct ConfigValue {
     ValueType type;
     std::string raw;
+    std::vector<ConfigValue> arrayValues;
+    std::map<std::string, ConfigValue> objectValues;
 };
 
 struct ScanState {
@@ -142,36 +146,14 @@ collect_top_level_pairs(const std::vector<std::string>& lines) {
     
 }
 
-ConfigValue detect_type(const std::string& value) {
-    ConfigValue parsed_line;
-    parsed_line.raw = trim(value);
-
-    if (parsed_line.raw.empty()) {
-        parsed_line.type = ValueType::STRING;
-        return parsed_line;
-    }
-
-    size_t isSym = (parsed_line.raw[0] == '+' || parsed_line.raw[0] == '-') ? 1 : 0;
-
-    if (parsed_line.raw == "true" || parsed_line.raw == "false") {
-        parsed_line.type = ValueType::BOOLEAN;
-    }
-    else if (isSym < parsed_line.raw.size() && std::all_of(parsed_line.raw.begin() + isSym, parsed_line.raw.end(), ::isdigit)) {
-        parsed_line.type = ValueType::NUMBER;
-    }
-    else {
-        parsed_line.type = ValueType::STRING;
-    }
-
-    return parsed_line;
-}
-
 std::map<std::string, ConfigValue>parse(const std::vector<std::string> &lines) {
     std::map<std::string, ConfigValue> result;
+
 
     auto pairs = collect_top_level_pairs(lines);
     for (auto& [key, raw_value] : pairs) {
         result[key] = detect_type(raw_value);
+
     }
 
     return result;
@@ -236,7 +218,10 @@ void save_to_file(std::map<std::string, ConfigValue> &config, const std::string&
 }
 
 /*
- DOesnt work with value '{' and '['
+ DOesnt work with value '{' and '[', add to ValueType new types(ARRAY and OBJECT) and add to StructValue new data
+    std::vector<ConfigValue> arrayValues;
+    std::map<std::string, ConfigValue> objectValues;
+    create recursion function
  bugs
 */
 
